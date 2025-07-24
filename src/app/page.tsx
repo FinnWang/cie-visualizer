@@ -314,8 +314,42 @@ export default function CIEVisualizerPage() {
           </div>
         </main>
         <footer className="text-center p-4 text-sm text-muted-foreground border-t">
-          <p>&copy; {new Date().getFullYear()} CIE視覺化點位工具. 版權所有.</p>
+           {/* 動態終端機屬名 */}
+           <div className="terminal-style mt-4 inline-block font-mono text-xs">
+             <span>&gt; Forged by Finn</span>
+
+           </div>
+
+           <style jsx>{`
+             .terminal-style span:first-child {
+               display: inline-block;
+               white-space: nowrap;
+               overflow: hidden;
+               width: 0;
+               animation: typing 2s steps(16, end) forwards;
+             }
+
+             .cursor {
+               display: inline-block;
+               vertical-align: bottom;
+               animation: blink 1s step-end infinite;
+             }
+
+             @keyframes typing {
+               from { width: 0 }
+               to { width: 100% }
+             }
+
+             @keyframes blink {
+               from, to { opacity: 1 }
+               50% { opacity: 0 }
+             }
+           `}</style>
+           <p>&copy; {new Date().getFullYear()} CIE Visualizer. All Rights Reserved.</p>
         </footer>
+            
+
+
       </div>
     </>
   );
