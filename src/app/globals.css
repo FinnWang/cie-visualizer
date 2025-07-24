@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  :root {
+    --background: 270 25% 97%; /* #F7F5F9 - 極淡紫色 */
+    --foreground: 270 10% 20%; /* Darker for contrast */
+
+    --card: 270 25% 97%; /* Same as background */
+    --card-foreground: 270 10% 20%; /* Same as foreground */
+
+    --popover: 270 25% 97%;
+    --popover-foreground: 270 10% 20%;
+
+    --primary: 208 65% 82%; /* #B4D4ED - 淡藍色, for buttons */
+    --primary-foreground: 208 30% 20%; /* Dark text on light blue */
+
+    --secondary: 263 30% 90%; /* Lighter shade of accent */
+    --secondary-foreground: 263 20% 30%;
+
+    --muted: 270 20% 94%; /* Lighter version of accent/background */
+    --muted-foreground: 270 10% 45%; /* For less important text */
+
+    --accent: 263 30% 85%; /* #D8CEE6 - 淡紫色, main theme color */
+    --accent-foreground: 263 20% 30%; /* Darker text on light purple */
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 270 20% 90%; /* Slightly darker than background for borders */
+    --input: 270 20% 93%; /* For input fields */
+    --ring: 208 65% 75%; /* Slightly darker primary for focus rings */
+
+    --radius: 0.5rem;
+
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    /* Sidebar specific variables from default, can be adjusted if sidebar is used extensively */
+    --sidebar-background: 270 25% 98%;
+    --sidebar-foreground: 270 10% 26.1%;
+    --sidebar-primary: 208 65% 80%;
+    --sidebar-primary-foreground: 208 30% 15%;
+    --sidebar-accent: 263 30% 92%;
+    --sidebar-accent-foreground: 263 20% 25%;
+    --sidebar-border: 270 20% 91%;
+    --sidebar-ring: 208 65% 70%;
+  }
+
+  .dark {
+    --background: 270 10% 10%;
+    --foreground: 270 10% 90%;
+
+    --card: 270 10% 12%;
+    --card-foreground: 270 10% 90%;
+
+    --popover: 270 10% 10%;
+    --popover-foreground: 270 10% 90%;
+
+    --primary: 208 55% 60%; /* Darker shade of light blue */
+    --primary-foreground: 208 100% 95%; /* Light text */
+
+    --secondary: 263 20% 25%;
+    --secondary-foreground: 263 100% 92%;
+
+    --muted: 270 10% 18%;
+    --muted-foreground: 270 10% 60%;
+
+    --accent: 263 25% 55%; /* Darker shade of light purple */
+    --accent-foreground: 263 100% 92%; /* Light text */
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 270 10% 20%;
+    --input: 270 10% 17%;
+    --ring: 208 55% 50%;
+
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    
+    /* Sidebar specific variables for dark mode */
+    --sidebar-background: 270 10% 12%;
+    --sidebar-foreground: 270 10% 85%;
+    --sidebar-primary: 208 55% 58%;
+    --sidebar-primary-foreground: 208 100% 96%;
+    --sidebar-accent: 263 25% 20%;
+    --sidebar-accent-foreground: 263 100% 90%;
+    --sidebar-border: 270 10% 18%;
+    --sidebar-ring: 208 55% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
