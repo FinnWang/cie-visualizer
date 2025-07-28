@@ -180,7 +180,7 @@ export default function CIEVisualizerPage() {
     diagramWidthPx: DIAGRAM1976_WIDTH_PX,
     diagramHeightPx: DIAGRAM1976_HEIGHT_PX,
     buttonText: "切換至 CIE 1931 xy 圖表",
-    titleSuffix: "u'v' (1976)",
+    titleSuffix: "u'v' (1976) and x'y' (1931)",
     labelHoriz: "u'",
     labelVert: "v'",
     labelHorizFull: "u' 座標",
@@ -216,7 +216,7 @@ export default function CIEVisualizerPage() {
             <div className="flex items-center">
               <Eye className="h-8 w-8 text-primary mr-3" />
               <h1 className="text-2xl font-semibold text-foreground">
-                CIE視覺化點位工具 <span className="text-base text-muted-foreground">({diagramConfig.titleSuffix})</span>
+                CIE Visual <span className="text-base text-muted-foreground">({diagramConfig.titleSuffix})</span>
               </h1>
             </div>
           </div>
