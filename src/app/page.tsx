@@ -50,7 +50,7 @@ const DIAGRAM1931_HEIGHT_PX = 525; // 您的 cie1931_diagram.png 圖表中 y軸�
 export default function CIEVisualizerPage() {
   const [points, setPoints] = useState<CIEPoint[]>([]);
   const [isClient, setIsClient] = useState(false);
-  const [diagramType, setDiagramType] = useState<'1976uv' | '1931xy'>('1976uv');
+  const [diagramType, setDiagramType] = useState<'1976uv' | '1931xy'>('1931xy');
   const importInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
