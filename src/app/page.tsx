@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CIEPoint, ExternalCIEPoint } from "@/lib/cie-types";
 import { CIEDiagram } from "@/components/cie/cie-diagram";
 import { PointInputForm } from "@/components/cie/point-input-form";
@@ -10,60 +10,123 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { FileDown, FileUp, Trash2, Eye, StretchHorizontal } from "lucide-react";
+import {
+  Eye,
+  FileDown,
+  FileSpreadsheet,
+  FileUp,
+  ImageDown,
+  RotateCcw,
+  Share2,
+  StretchHorizontal,
+  Trash2,
+} from "lucide-react";
+import {
+  IMG_HEIGHT,
+  IMG_WIDTH,
+  getDiagramConfig,
+  type DiagramType,
+} from "@/lib/cie-constants";
+import { exportDiagramAsPng, exportPointsAsCsv } from "@/lib/export-utils";
+import {
+  buildShareUrl,
+  readSharedStateFromUrl,
+  URL_MAX_LENGTH,
+} from "@/lib/url-state";
 
-const IMG_WIDTH = 600;
-const IMG_HEIGHT = 600;
+const STORAGE_KEY = "cie-visualizer-state-v1";
 
-// --- CIE 1976 u'v' Diagram Settings ---
-// 圖片路徑 (相對於 public 資料夾)
-const CIE1976_IMAGE_URL = "/mceclip5.png";
-// u'v' 座標軸的數據範圍
-const U_PRIME_1976_MIN = 0.0;
-const U_PRIME_1976_MAX = 0.6;
-const V_PRIME_1976_MIN = 0.0;
-const V_PRIME_1976_MAX = 0.6;
-// 圖表原點 (u'Min, v'Min) 在圖片上的像素位置 (從圖片左上角算起)
-// DIAGRAM1976_ORIGIN_Y_PX 通常是圖表 Y 軸物理顯示上的最低點
-// 範例值：假設圖表左下角原點在 (X=50px, Y=550px from top)
-const DIAGRAM1976_ORIGIN_X_PX = 38; // 您的 mceclip5.png 圖表中 u'軸最小值所在的 X 像素位置
-const DIAGRAM1976_ORIGIN_Y_PX = 566; // 您的 mceclip5.png 圖表中 v'軸最小值所在的 Y 像素位置 (通常是圖表底部)
-// 圖表 X 軸與 Y 軸在圖片上所佔的總像素寬度與高度
-const DIAGRAM1976_WIDTH_PX = 527;   // 您的 mceclip5.png 圖表中 u'軸的總像素寬度
-const DIAGRAM1976_HEIGHT_PX = 545;  // 您的 mceclip5.png 圖表中 v'軸的總像素高度
+interface StoredState {
+  points: ExternalCIEPoint[];
+  diagramType: DiagramType;
+}
 
-// --- CIE 1931 xy Diagram Settings ---
-const CIE1931_IMAGE_URL = "/cie1931_diagram.png";
-// xy 座標軸的數據範圍
-const X_1931_MIN = 0.0;
-const X_1931_MAX = 0.8;
-const Y_1931_MIN = 0.0;
-const Y_1931_MAX = 0.9;
-// 圖表原點 (xMin, yMin) 在圖片上的像素位置
-const DIAGRAM1931_ORIGIN_X_PX = 72; // 您的 cie1931_diagram.png 圖表中 x軸最小值所在的 X 像素位置
-const DIAGRAM1931_ORIGIN_Y_PX = 542; // 您的 cie1931_diagram.png 圖表中 y軸最小值所在的 Y 像素位置 (通常是圖表底部)
-// 圖表 X 軸與 Y 軸在圖片上所佔的總像素寬度與高度
-const DIAGRAM1931_WIDTH_PX = 498; // 您的 cie1931_diagram.png 圖表中 x軸的總像素寬度
-const DIAGRAM1931_HEIGHT_PX = 525; // 您的 cie1931_diagram.png 圖表中 y軸的總像素高度
+function makePointId(prefix = "point"): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
 
+function hydratePoints(external: ExternalCIEPoint[], prefix = "point"): CIEPoint[] {
+  return external.map((p, i) => ({
+    id: `${prefix}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+    name: p.name,
+    uPrime: p.uPrime,
+    vPrime: p.vPrime,
+  }));
+}
 
 export default function CIEVisualizerPage() {
   const [points, setPoints] = useState<CIEPoint[]>([]);
   const [isClient, setIsClient] = useState(false);
-  const [diagramType, setDiagramType] = useState<'1976uv' | '1931xy'>('1931xy');
+  const [diagramType, setDiagramType] = useState<DiagramType>("1931xy");
+  const [editingPointId, setEditingPointId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     setIsClient(true);
+
+    const shared = readSharedStateFromUrl();
+    if (shared) {
+      setPoints(hydratePoints(shared.points, "shared"));
+      setDiagramType(shared.diagramType);
+      toast({
+        title: "已從分享連結載入",
+        description: `匯入 ${shared.points.length} 個點位。`,
+      });
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as StoredState;
+        if (parsed && Array.isArray(parsed.points)) {
+          setPoints(hydratePoints(parsed.points, "stored"));
+        }
+        if (parsed.diagramType === "1976uv" || parsed.diagramType === "1931xy") {
+          setDiagramType(parsed.diagramType);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to read stored state:", err);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!isClient) return;
+    try {
+      const toStore: StoredState = {
+        points: points.map(({ name, uPrime, vPrime }) => ({ name, uPrime, vPrime })),
+        diagramType,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+    } catch (err) {
+      console.warn("Failed to write stored state:", err);
+    }
+  }, [points, diagramType, isClient]);
+
+  const diagramConfig = useMemo(() => getDiagramConfig(diagramType), [diagramType]);
+
+  const editingPoint = useMemo(
+    () => (editingPointId ? points.find((p) => p.id === editingPointId) ?? null : null),
+    [editingPointId, points]
+  );
+
   const handleAddPoint = (data: { name: string; uPrime: number; vPrime: number }) => {
-    const newPoint: CIEPoint = {
-      id: `point-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      ...data,
-    };
-    setPoints((prevPoints) => [...prevPoints, newPoint]);
+    if (editingPointId) {
+      setPoints((prev) =>
+        prev.map((p) => (p.id === editingPointId ? { ...p, ...data } : p))
+      );
+      toast({
+        title: "點位已更新",
+        description: `點位 "${data.name}" 已更新。`,
+      });
+      setEditingPointId(null);
+      return;
+    }
+    const newPoint: CIEPoint = { id: makePointId(), ...data };
+    setPoints((prev) => [...prev, newPoint]);
     toast({
       title: "點位已新增",
       description: `已成功新增點位 "${data.name}"。`,
@@ -72,6 +135,7 @@ export default function CIEVisualizerPage() {
 
   const handleClearPoints = () => {
     setPoints([]);
+    setEditingPointId(null);
     toast({
       title: "點位已清除",
       description: "所有標記的點位已被清除。",
@@ -79,8 +143,11 @@ export default function CIEVisualizerPage() {
   };
 
   const handleDeletePoint = (id: string) => {
-    const pointToDelete = points.find(p => p.id === id);
-    setPoints((prevPoints) => prevPoints.filter((point) => point.id !== id));
+    const pointToDelete = points.find((p) => p.id === id);
+    setPoints((prev) => prev.filter((p) => p.id !== id));
+    if (editingPointId === id) {
+      setEditingPointId(null);
+    }
     if (pointToDelete) {
       toast({
         title: "點位已刪除",
@@ -88,6 +155,17 @@ export default function CIEVisualizerPage() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleEditPoint = (id: string) => {
+    setEditingPointId((current) => (current === id ? null : id));
+  };
+
+  const handleCancelEdit = () => setEditingPointId(null);
+
+  const handleToggleDiagram = () => {
+    setEditingPointId(null);
+    setDiagramType((prev) => (prev === "1976uv" ? "1931xy" : "1976uv"));
   };
 
   const handleExportJson = () => {
@@ -120,93 +198,143 @@ export default function CIEVisualizerPage() {
   const handleImportJson = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!isClient) return;
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const importedData = JSON.parse(e.target?.result as string);
-          if (!Array.isArray(importedData)) {
-            throw new Error("JSON 檔案格式不正確，應為一個陣列。");
-          }
-          const newPoints: CIEPoint[] = importedData.map((p: any, index: number) => {
-            if (
-              typeof p.name !== "string" ||
-              typeof p.uPrime !== "number" ||
-              typeof p.vPrime !== "number"
-            ) {
-              throw new Error(`第 ${index + 1} 個點位資料格式不正確。`);
-            }
-            return {
-              id: `imported-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
-              name: p.name,
-              uPrime: p.uPrime,
-              vPrime: p.vPrime,
-            };
-          });
-          setPoints(newPoints);
-          toast({
-            title: "匯入成功",
-            description: `成功匯入 ${newPoints.length} 個點位。`,
-          });
-        } catch (error: any) {
-          console.error("Error importing JSON:", error);
-          toast({
-            title: "匯入失敗",
-            description: error.message || "讀取 JSON 檔案時發生錯誤。",
-            variant: "destructive",
-          });
-        } finally {
-          if (importInputRef.current) {
-            importInputRef.current.value = "";
-          }
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target?.result as string);
+        if (!Array.isArray(importedData)) {
+          throw new Error("JSON 檔案格式不正確，應為一個陣列。");
         }
-      };
-      reader.readAsText(file);
+        const newPoints: CIEPoint[] = importedData.map((p: any, index: number) => {
+          if (
+            typeof p.name !== "string" ||
+            typeof p.uPrime !== "number" ||
+            typeof p.vPrime !== "number"
+          ) {
+            throw new Error(`第 ${index + 1} 個點位資料格式不正確。`);
+          }
+          return {
+            id: `imported-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 9)}`,
+            name: p.name,
+            uPrime: p.uPrime,
+            vPrime: p.vPrime,
+          };
+        });
+        setPoints(newPoints);
+        setEditingPointId(null);
+        toast({
+          title: "匯入成功",
+          description: `成功匯入 ${newPoints.length} 個點位。`,
+        });
+      } catch (error: any) {
+        console.error("Error importing JSON:", error);
+        toast({
+          title: "匯入失敗",
+          description: error.message || "讀取 JSON 檔案時發生錯誤。",
+          variant: "destructive",
+        });
+      } finally {
+        if (importInputRef.current) {
+          importInputRef.current.value = "";
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExportPng = useCallback(async () => {
+    if (!isClient) return;
+    if (points.length === 0) {
+      toast({
+        title: "無法匯出",
+        description: "沒有可匯出的點位。",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await exportDiagramAsPng(diagramConfig, points);
+      toast({
+        title: "PNG 匯出成功",
+        description: "圖表已儲存為 PNG 圖片。",
+      });
+    } catch (err: any) {
+      console.error("PNG export failed:", err);
+      toast({
+        title: "PNG 匯出失敗",
+        description: err?.message ?? "未知錯誤。",
+        variant: "destructive",
+      });
+    }
+  }, [isClient, points, diagramConfig, toast]);
+
+  const handleExportCsv = () => {
+    if (!isClient) return;
+    if (points.length === 0) {
+      toast({
+        title: "無法匯出",
+        description: "沒有可匯出的點位。",
+        variant: "destructive",
+      });
+      return;
+    }
+    exportPointsAsCsv(points, diagramConfig.labelHoriz, diagramConfig.labelVert);
+    toast({
+      title: "CSV 匯出成功",
+      description: "點位資料已匯出為 CSV 檔案。",
+    });
+  };
+
+  const handleShareLink = async () => {
+    if (!isClient) return;
+    if (points.length === 0) {
+      toast({
+        title: "無法產生分享連結",
+        description: "目前沒有任何點位。",
+        variant: "destructive",
+      });
+      return;
+    }
+    const shareUrl = buildShareUrl(points, diagramType);
+    if (shareUrl.length > URL_MAX_LENGTH) {
+      toast({
+        title: "點位過多",
+        description: "分享連結過長，請改用 JSON 匯出。",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "分享連結已複製",
+        description: "連結已複製到剪貼簿，可貼到任何地方分享。",
+      });
+    } catch {
+      toast({
+        title: "無法自動複製",
+        description: shareUrl,
+        variant: "destructive",
+      });
     }
   };
 
-  const handleToggleDiagram = () => {
-    setDiagramType(prevType => prevType === '1976uv' ? '1931xy' : '1976uv');
+  const handleReset = () => {
+    setPoints([]);
+    setEditingPointId(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    toast({
+      title: "已重設",
+      description: "本機儲存與所有點位皆已清除。",
+      variant: "destructive",
+    });
   };
-
-  const diagramConfig = diagramType === '1976uv' ? {
-    imageSrc: CIE1976_IMAGE_URL,
-    axisHorizMin: U_PRIME_1976_MIN,
-    axisHorizMax: U_PRIME_1976_MAX,
-    axisVertMin: V_PRIME_1976_MIN,
-    axisVertMax: V_PRIME_1976_MAX,
-    diagramOriginXPx: DIAGRAM1976_ORIGIN_X_PX,
-    diagramOriginYPx: DIAGRAM1976_ORIGIN_Y_PX,
-    diagramWidthPx: DIAGRAM1976_WIDTH_PX,
-    diagramHeightPx: DIAGRAM1976_HEIGHT_PX,
-    buttonText: "切換至 CIE 1931 xy 圖表",
-    titleSuffix: "u'v' (1976) and x'y' (1931)",
-    labelHoriz: "u'",
-    labelVert: "v'",
-    labelHorizFull: "u' 座標",
-    labelVertFull: "v' 座標",
-    placeholderHoriz: "例如：0.1978",
-    placeholderVert: "例如：0.4683",
-  } : {
-    imageSrc: CIE1931_IMAGE_URL,
-    axisHorizMin: X_1931_MIN,
-    axisHorizMax: X_1931_MAX,
-    axisVertMin: Y_1931_MIN,
-    axisVertMax: Y_1931_MAX,
-    diagramOriginXPx: DIAGRAM1931_ORIGIN_X_PX,
-    diagramOriginYPx: DIAGRAM1931_ORIGIN_Y_PX,
-    diagramWidthPx: DIAGRAM1931_WIDTH_PX,
-    diagramHeightPx: DIAGRAM1931_HEIGHT_PX,
-    buttonText: "切換至 CIE 1976 u'v' 圖表",
-    titleSuffix: "xy (1931)",
-    labelHoriz: "x",
-    labelVert: "y",
-    labelHorizFull: "x 座標",
-    labelVertFull: "y 座標",
-    placeholderHoriz: "例如：0.3127",
-    placeholderVert: "例如：0.3290",
-  };
-
 
   return (
     <>
@@ -231,6 +359,9 @@ export default function CIEVisualizerPage() {
                 labelVert={diagramConfig.labelVertFull}
                 placeholderHoriz={diagramConfig.placeholderHoriz}
                 placeholderVert={diagramConfig.placeholderVert}
+                mode={editingPoint ? "edit" : "add"}
+                initialValues={editingPoint}
+                onCancel={handleCancelEdit}
               />
               <Card>
                 <CardHeader>
@@ -246,16 +377,32 @@ export default function CIEVisualizerPage() {
                     <StretchHorizontal className="mr-2 h-4 w-4" /> {diagramConfig.buttonText}
                   </Button>
                   <Button
-                    onClick={handleClearPoints}
-                    variant="destructive"
+                    onClick={handleExportPng}
                     className="w-full"
                     disabled={points.length === 0 || !isClient}
                   >
-                    <Trash2 className="mr-2 h-4 w-4" /> 清除所有點位
+                    <ImageDown className="mr-2 h-4 w-4" /> 匯出為 PNG
                   </Button>
-                  <Button 
-                    onClick={handleExportJson} 
+                  <Button
+                    onClick={handleExportCsv}
                     className="w-full"
+                    variant="outline"
+                    disabled={points.length === 0 || !isClient}
+                  >
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> 匯出為 CSV
+                  </Button>
+                  <Button
+                    onClick={handleShareLink}
+                    className="w-full"
+                    variant="outline"
+                    disabled={points.length === 0 || !isClient}
+                  >
+                    <Share2 className="mr-2 h-4 w-4" /> 複製分享連結
+                  </Button>
+                  <Button
+                    onClick={handleExportJson}
+                    className="w-full"
+                    variant="outline"
                     disabled={points.length === 0 || !isClient}
                   >
                     <FileDown className="mr-2 h-4 w-4" /> 匯出 JSON
@@ -263,6 +410,7 @@ export default function CIEVisualizerPage() {
                   <Button
                     onClick={() => isClient && importInputRef.current?.click()}
                     className="w-full"
+                    variant="outline"
                     disabled={!isClient}
                   >
                     <FileUp className="mr-2 h-4 w-4" /> 匯入 JSON
@@ -275,12 +423,30 @@ export default function CIEVisualizerPage() {
                     className="hidden"
                     disabled={!isClient}
                   />
+                  <Button
+                    onClick={handleClearPoints}
+                    variant="destructive"
+                    className="w-full"
+                    disabled={points.length === 0 || !isClient}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> 清除所有點位
+                  </Button>
+                  <Button
+                    onClick={handleReset}
+                    variant="ghost"
+                    className="w-full text-muted-foreground"
+                    disabled={!isClient}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" /> 重設（清除本機儲存）
+                  </Button>
                 </CardContent>
               </Card>
               {isClient && (
                 <PointList
                   points={points}
                   onDeletePoint={handleDeletePoint}
+                  onEditPoint={handleEditPoint}
+                  editingPointId={editingPointId}
                   labelHoriz={diagramConfig.labelHoriz}
                   labelVert={diagramConfig.labelVert}
                 />
@@ -314,10 +480,8 @@ export default function CIEVisualizerPage() {
           </div>
         </main>
         <footer className="text-center p-4 text-sm text-muted-foreground border-t">
-           {/* 動態終端機屬名 */}
            <div className="terminal-style mt-4 inline-block font-mono text-xs">
              <span>&gt; Forged by Finn</span>
-
            </div>
 
            <style jsx>{`
@@ -347,12 +511,7 @@ export default function CIEVisualizerPage() {
            `}</style>
            <p>&copy; {new Date().getFullYear()} CIE Visualizer. All Rights Reserved.</p>
         </footer>
-            
-
-
       </div>
     </>
   );
 }
-    
-    

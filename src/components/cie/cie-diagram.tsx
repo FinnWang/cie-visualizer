@@ -10,6 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { clampToImage, transformCoordinates } from "@/lib/cie-coords";
 
 interface CIEDiagramProps {
   points: CIEPoint[];
@@ -44,24 +45,15 @@ export function CIEDiagram({
   labelHoriz,
   labelVert,
 }: CIEDiagramProps) {
-  const transformCoordinates = (pointU: number, pointV: number) => {
-    const horizAxisRange = axisHorizMax - axisHorizMin;
-    const vertAxisRange = axisVertMax - axisVertMin;
-
-    if (horizAxisRange <= 0 || vertAxisRange <= 0 || diagramWidthPx <= 0 || diagramHeightPx <= 0) {
-      return { x: diagramOriginXPx + diagramWidthPx / 2, y: diagramOriginYPx - diagramHeightPx / 2 };
-    }
-
-    const uRatio = (pointU - axisHorizMin) / horizAxisRange;
-    const vRatio = (pointV - axisVertMin) / vertAxisRange;
-
-    const xOffsetFromOrigin = uRatio * diagramWidthPx;
-    const yOffsetFromOrigin = vRatio * diagramHeightPx;
-
-    const finalX = diagramOriginXPx + xOffsetFromOrigin;
-    const finalY = diagramOriginYPx - yOffsetFromOrigin;
-    
-    return { x: finalX, y: finalY };
+  const transformParams = {
+    axisHorizMin,
+    axisHorizMax,
+    axisVertMin,
+    axisVertMax,
+    diagramOriginXPx,
+    diagramOriginYPx,
+    diagramWidthPx,
+    diagramHeightPx,
   };
 
   return (
@@ -84,11 +76,9 @@ export function CIEDiagram({
           }}
         />
         {points.map((point) => {
-          const { x, y } = transformCoordinates(point.uPrime, point.vPrime);
-          
-          const iconHalfSize = 12; 
-          const clampedX = Math.max(iconHalfSize, Math.min(x, imageWidth - iconHalfSize));
-          const clampedY = Math.max(iconHalfSize, Math.min(y, imageHeight - iconHalfSize));
+          const { x, y } = transformCoordinates(point.uPrime, point.vPrime, transformParams);
+          const iconHalfSize = 12;
+          const { x: clampedX, y: clampedY } = clampToImage(x, y, imageWidth, imageHeight, iconHalfSize);
 
           return (
             <Tooltip key={point.id}>
@@ -98,7 +88,7 @@ export function CIEDiagram({
                   style={{
                     left: `${clampedX}px`,
                     top: `${clampedY}px`,
-                    transform: "translate(-50%, -50%) scale(0)", 
+                    transform: "translate(-50%, -50%) scale(0)",
                     animation: "popIn 0.3s ease-out forwards",
                   }}
                   role="img"
